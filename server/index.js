@@ -15,10 +15,15 @@ app.use(cors())
 app.use(express.json())
 app.use(express.static(path.resolve(__dirname, 'static')))
 app.use(fileUpload({}))
+app.get('/', (req, res) => {
+    res.send('Hello from ApsnyBillboard!');
+  });
 app.use('/api', router)
+
 
 // Обработка ошибок, последний Middleware
 app.use(errorHandler)
+
 
 const start = async () => {
     try{

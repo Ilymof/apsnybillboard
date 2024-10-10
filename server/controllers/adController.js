@@ -4,14 +4,66 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid'); // Импорт UUID
 const fs = require('fs');
 const { switchKeyboardLayout } = require('./helper'); 
+const cron = require('node-cron');
+const dayjs = require('dayjs');
+
+cron.schedule('0 0 * * *', async () => {
+  try {
+    const now = new Date();
+    const expiredAds = await Ad.findAll({
+      where: {
+        expirationDate: { [Op.lt]: now },
+        isActive: true
+      }
+    });
+
+    for (let ad of expiredAds) {
+      await ad.update({ isActive: false });
+      console.log(`Объявление с id ${ad.id} деактивировано`);
+    }
+  } catch (error) {
+    console.error('Ошибка при удалении просроченных объявлений:', error);
+  }
+});
+
+cron.schedule('0 0 * * *', async () => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 1);
+
+    const adsToDelete = await Ad.findAll({
+      where: {
+        expirationDate: { [Op.lt]: thirtyDaysAgo },
+        isActive: false
+      }
+    });
+
+    for (let ad of adsToDelete) {
+      await ad.destroy();
+      console.log(`Объявление с id ${ad.id} удалено`);
+    }
+  } catch (error) {
+    console.error('Ошибка при удалении старых объявлений:', error);
+  }
+});
+
 
 class AdController 
 {
    
   async AdCreate(req, res) {
     try {
-      let { adName, description, price, regionId, categoryId, subcategoryId } = req.body;
+      const userId = req.user.id;
+      let { adName, description, price, regionId, categoryId, subcategoryId, duration  } = req.body;
   
+       // duration — количество дней, на которые активно объявление (от 7 до 180 дней)
+      if (duration < 7 || duration > 180) {
+        return res.status(400).json({ message: "Неверная продолжительность действия объявления" });
+      }
+
+      const now = dayjs();
+      const expirationDate = now.add(duration, 'day');
+
       // Проверяем наличие изображений
       if (!req.files || !req.files.images || req.files.images.length === 0) {
         return res.status(400).json({ message: "Необходимо загрузить хотя бы одно изображение" });
@@ -30,7 +82,7 @@ class AdController
       }
   
       // Создаем объявление
-      const ad = await Ad.create({ adName, description, price, regionId, categoryId, subcategoryId });
+      const ad = await Ad.create({ adName, description, price, regionId, categoryId, subcategoryId, userId, expirationDate });
   
       // Массив для изображений
       let images = req.files.images;
@@ -63,7 +115,7 @@ class AdController
       return res.status(201).json(adWithPhotos);
     } catch (error) {
       console.error(error);
-      return res.status(500).json({ message: "Ошибка сервера", error: error.message });
+      return res.status(500).json({ message: "Не удалось создать объявление", error: error.message });
     }
   }
    
@@ -142,7 +194,20 @@ class AdController
         return res.status(404).json({ message: "Объявления не найдены" });
       }
   
-      return res.status(200).json(ads);
+      // Преобразование структуры данных
+      const transformedAds = ads.map(ad => ({
+        adName: ad.adName,
+        description: ad.description,
+        price: ad.price,
+        category: ad.category.categoryName,
+        subcategory: ad.subcategory.subcategoryName,
+        region: ad.region.regionName,
+        photos: ad.photos.map(photo => ({
+          url: photo.url
+        }))
+      }));
+  
+      return res.status(200).json(transformedAds);
     } catch (error) {
       console.error('Ошибка при получении объявлений:', error);
       return res.status(500).json({ message: "Ошибка сервера", error: error.message });
@@ -239,6 +304,85 @@ class AdController
     }
   }
 
+  async deleteAd(req, res) {
+    try {
+      const { id } = req.params; // Получаем id объявления из запроса
+      const userId = req.user.id; // Получаем id пользователя из токена (authMiddleware уже добавляет req.user)
+  
+      // Находим объявление
+      const ad = await Ad.findByPk(id, {
+        include: { model: Photo, as: 'photos' }
+      });
+  
+      if (!ad) {
+        return res.status(404).json({ message: 'Объявление не найдено' });
+      }
+  
+      // Проверяем, принадлежит ли объявление пользователю
+      if (ad.userId !== userId) {
+        return res.status(403).json({ message: 'Нет доступа. Вы можете удалять только свои объявления.' });
+      }
+  
+      // Удаляем фотографии с файловой системы
+      for (let photo of ad.photos) {
+        const filePath = path.resolve(__dirname, '..', 'static', photo.url);
+        
+        // Проверяем, существует ли файл, и удаляем его
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath); // Удаление файла
+        }
+      }
+  
+      // Удаляем фотографии из базы данных
+      await Photo.destroy({ where: { adId: ad.id } });
+  
+      // Удаляем объявление
+      await Ad.destroy({ where: { id: ad.id } });
+  
+      return res.status(200).json({ message: 'Объявление и фотографии удалены' });
+    } catch (error) {
+      console.error('Ошибка при удалении объявления:', error);
+      return res.status(500).json({ message: 'Ошибка сервера', error: error.message });
+    }
+}
+async extendAd(req, res) {
+  try {
+    const adId = req.params.id; // Получаем id из параметров URL
+    const { extensionDays } = req.body; // Получаем количество дней для продления из тела запроса
+
+    if (!extensionDays || extensionDays < 7 || extensionDays > 180) {
+      return res.status(400).json({ message: "Неверное количество дней для продления (от 7 до 180)" });
+    }
+
+    const ad = await Ad.findByPk(adId);
+
+    if (!ad) {
+      return res.status(404).json({ message: "Объявление не найдено" });
+    }
+
+    // Проверяем, что пользователь является владельцем объявления
+    if (ad.userId !== req.user.id) { // Предполагается, что authMiddleware добавляет `user` в `req`
+      return res.status(403).json({ message: "У вас нет прав для продления этого объявления" });
+    }
+
+    const now = new Date();
+    const daysLeft = Math.ceil((ad.expirationDate - now) / (1000 * 60 * 60 * 24));
+
+    if (daysLeft > 3) {
+      return res.status(400).json({ message: "Объявление можно продлить только если осталось менее 3 дней" });
+    }
+
+    // Продлеваем объявление
+    ad.expirationDate = new Date(ad.expirationDate);
+    ad.expirationDate.setDate(ad.expirationDate.getDate() + extensionDays);
+    await ad.save();
+
+    return res.status(200).json({ message: "Объявление продлено", newExpirationDate: ad.expirationDate });
+  } catch (error) {
+    console.error('Ошибка при продлении объявления:', error);
+    return res.status(500).json({ message: "Ошибка сервера", error: error.message });
+  }
+}
 
 }
 

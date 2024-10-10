@@ -24,6 +24,8 @@ const Ad = sequelize.define('ad',
         adName: {type: DataTypes.STRING, allowNull: false},
         description: {type: DataTypes.STRING, allowNull: false},
         price: {type: DataTypes.INTEGER, allowNull: false},
+        expirationDate: {type: DataTypes.DATE, allowNull: false},
+        isActive: {type: DataTypes.BOOLEAN,defaultValue: true}
     }
  )
  const Basket = sequelize.define('basket', {

@@ -47,16 +47,16 @@ async addSubcategory(req, res) {
  
    }
 
-    async getSubcategories(req, res) {
-      try {
-        const subcategory = await Subcategory.findAll({attributes: { exclude: ['createdAt', 'updatedAt'] }});
+async getSubcategories(req, res) {
+  try {
+    const subcategory = await Subcategory.findAll({attributes: { exclude: ['createdAt', 'updatedAt'] }});
 
-      res.status(200).json(subcategory);
-    } catch (error) {
-      res.status(400).json({ error: error.message });
-      console.error('Ошибка при получении подкатегорий:', error);
-    }
-    }
+  res.status(200).json(subcategory);
+} catch (error) {
+  res.status(400).json({ error: error.message });
+  console.error('Ошибка при получении подкатегорий:', error);
+}
+}
 
 async clearSubcategoryList(req, res) {
   try {

@@ -1,11 +1,11 @@
 const Router = require('express')
 const router = new Router()
 const regionController = require('../controllers/regionController')
+const checkRole = require('../middleware/checkRoleMiddleware');
 
-
-router.post('/', regionController.CreateRegion)
+router.post('/',checkRole('ADMIN'), regionController.CreateRegion)
 router.get('/', regionController.getAll)
-router.delete('/', regionController.clearRegionList)
+router.delete('/',checkRole('ADMIN'),  regionController.clearRegionList)
 
 
 module.exports = router
