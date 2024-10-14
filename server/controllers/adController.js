@@ -546,11 +546,10 @@ async AdUpdate(req, res) {
     return res.status(500).json({ message: "Не удалось обновить объявление", error: error.message });
   }
 }
-async GetUserAd(req, res) { 
-  // Получаем userId из расшифрованного токена
+async GetUserAd(req, res) {
   const userId = req.user.id;
   console.log('User ID from token:', userId);
-  
+
   try {
     // Проверка наличия userId
     if (!userId) {
@@ -558,7 +557,7 @@ async GetUserAd(req, res) {
     }
 
     let ads = await Ad.findAll({
-      where: { userId }, // Используем userId из токена
+      where: { userId },
       include: [
         {
           model: Category,
@@ -581,7 +580,7 @@ async GetUserAd(req, res) {
           attributes: ['url'],
         }
       ],
-      attributes: ['adName', 'description', 'price']
+      attributes: ['adName', 'description', 'price', 'expirationDate'] // Добавляем поле expirationDate
     });
 
     if (!ads || ads.length === 0) {
@@ -589,17 +588,24 @@ async GetUserAd(req, res) {
     }
 
     // Преобразование структуры данных
-    const transformedAds = ads.map(ad => ({
-      adName: ad.adName,
-      description: ad.description,
-      price: ad.price,
-      category: ad.category ? ad.category.categoryName : null,
-      subcategory: ad.subcategory ? ad.subcategory.subcategoryName : null,
-      region: ad.region ? ad.region.regionName : null,
-      photos: ad.photos.map(photo => ({
-        url: photo.url
-      }))
-    }));
+    const transformedAds = ads.map(ad => {
+      const now = dayjs();
+      const expirationDate = dayjs(ad.expirationDate);
+      const daysRemaining = expirationDate.diff(now, 'day'); // Рассчитываем количество оставшихся дней
+
+      return {
+        adName: ad.adName,
+        description: ad.description,
+        price: ad.price,
+        category: ad.category ? ad.category.categoryName : null,
+        subcategory: ad.subcategory ? ad.subcategory.subcategoryName : null,
+        region: ad.region ? ad.region.regionName : null,
+        photos: ad.photos.map(photo => ({
+          url: photo.url
+        })),
+        daysRemaining: daysRemaining >= 0 ? daysRemaining : 0 // Если срок истек, возвращаем 0
+      };
+    });
 
     return res.status(200).json(transformedAds);
   } catch (error) {
