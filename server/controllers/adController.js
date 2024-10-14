@@ -193,8 +193,8 @@ class AdController
       });
   
       if (!ads || !ads.length) {
-        return res.status(204).json({ message: "Объявления не найдены" });
-      }
+        return res.status(200).json({ message: "Объявления не найдены", ads: [] });
+    }
   
       // Преобразование структуры данных
       const transformedAds = ads.map(ad => ({
