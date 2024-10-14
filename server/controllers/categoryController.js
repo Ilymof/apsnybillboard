@@ -1,5 +1,6 @@
 const {Category,Subcategory } = require('../models/models'); // Подключаем модель
 const sequelize = require('../db')
+
 class CategoryController {
 
   async CreateCategory(req,res)
@@ -13,10 +14,7 @@ class CategoryController {
       res.status(400).json({ error: error.message });
     }
 
-    }  
-    catch (error) {
-      console.error('Failed to add Category:', error);
-  }
+  }  
   async clearCategoryList(req, res) {
     const t = await sequelize.transaction(); // Открываем транзакцию
 
@@ -140,6 +138,43 @@ class CategoryController {
     res.status(500).json({ message: 'Failed to delete category and subcategories' });
   }
  }
+ async сategoryUpdate(req, res) {
+  const { id } = req.params;
+  const { categoryName } = req.body;
+
+  try {
+    // Проверка наличия regionName
+    if (!categoryName) {
+      return res.status(400).json({ message: "Поле categoryName обязательно для обновления" });
+    }
+
+    // Поиск региона по ID
+    const category = await Category.findOne({ where: { id } });
+
+    if (!category) {
+      return res.status(404).json({ message: "Подкатегория не найдена или доступ запрещен" });
+    }
+
+    // Обновление имени региона
+    category.categoryName = categoryName;
+
+    // Сохранение изменений
+    await category.save();
+
+    // Возврат обновленного региона
+    return res.status(200).json({
+      message: "Категория успешно обновлен",
+      category: {
+        id: category.id,
+        categoryName: category.categoryName,
+      },
+    });
+  } catch (error) {
+    console.error('Ошибка при обновлении категориии:', error);
+    return res.status(500).json({ message: "Не удалось обновить категорию", error: error.message });
+  }
+}
+
 }
 
 module.exports = new CategoryController()

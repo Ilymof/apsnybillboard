@@ -67,7 +67,42 @@ async clearSubcategoryList(req, res) {
   console.error('Failed to clear Ad:', error);
 }
 }
+async SubcategoryUpdate(req, res) {
+  const { id } = req.params;
+  const { subcategoryName } = req.body;
 
+  try {
+    // Проверка наличия regionName
+    if (!subcategoryName) {
+      return res.status(400).json({ message: "Поле regionName обязательно для обновления" });
+    }
+
+    // Поиск региона по ID
+    const subcategory = await Subcategory.findOne({ where: { id } });
+
+    if (!subcategory) {
+      return res.status(404).json({ message: "Подкатегория не найдена или доступ запрещен" });
+    }
+
+    // Обновление имени региона
+    subcategory.subcategoryName = subcategoryName;
+
+    // Сохранение изменений
+    await subcategory.save();
+
+    // Возврат обновленного региона
+    return res.status(200).json({
+      message: "Подкатегория успешно обновлен",
+      subcategory: {
+        id: subcategory.id,
+        subcategoryName: subcategory.subcategoryName,
+      },
+    });
+  } catch (error) {
+    console.error('Ошибка при обновлении подкатегориии:', error);
+    return res.status(500).json({ message: "Не удалось обновить подкатегорию", error: error.message });
+  }
+}
 }
 
   module.exports = new SubcategoryController()

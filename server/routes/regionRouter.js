@@ -6,6 +6,6 @@ const checkRole = require('../middleware/checkRoleMiddleware');
 router.post('/',checkRole('ADMIN'), regionController.CreateRegion)
 router.get('/', regionController.getAll)
 router.delete('/',checkRole('ADMIN'),  regionController.clearRegionList)
-
+router.post('/:id/updateregion',checkRole('ADMIN'),regionController.RegionUpdate)
 
 module.exports = router

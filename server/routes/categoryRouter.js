@@ -8,5 +8,5 @@ router.get('/', categoryController.getAll)
 router.delete('/',checkRole('ADMIN'), categoryController.clearCategoryList)
 router.get('/:id',categoryController.GetOneCategoryWithSub)
 router.delete('/:id', checkRole('ADMIN'),categoryController.delOneCategory)
-
+router.post('/:id/updatecategory',checkRole('ADMIN'),categoryController.сategoryUpdate)
 module.exports = router

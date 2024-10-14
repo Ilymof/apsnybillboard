@@ -2,10 +2,11 @@ const { Op } = require('sequelize');
 const {Ad, Photo, Category, Subcategory,Region} = require('../models/models')
 const path = require('path');
 const { v4: uuidv4 } = require('uuid'); // Импорт UUID
-const fs = require('fs');
+const fs = require('fs').promises;
 const { switchKeyboardLayout } = require('./helper'); 
 const cron = require('node-cron');
 const dayjs = require('dayjs');
+const sequelize = require('../db')
 
 cron.schedule('0 0 * * *', async () => {
   try {
@@ -53,6 +54,7 @@ class AdController
    
   async AdCreate(req, res) {
     try {
+      
       const userId = req.user.id;
       let { adName, description, price, regionId, categoryId, subcategoryId, duration  } = req.body;
   
@@ -190,8 +192,8 @@ class AdController
         attributes: ['adName', 'description', 'price']
       });
   
-      if (!ads.length) {
-        return res.status(404).json({ message: "Объявления не найдены" });
+      if (!ads || !ads.length) {
+        return res.status(204).json({ message: "Объявления не найдены" });
       }
   
       // Преобразование структуры данных
@@ -251,21 +253,87 @@ class AdController
         return res.status(404).json({ message: "Объявление не найдено" });
       }
   
-      return res.status(200).json(ad);
+      // Форматируем данные для вывода
+      const formattedAd = {
+        adName: ad.adName,
+        description: ad.description,
+        price: ad.price,
+        category: ad.category?.categoryName || null,
+        subcategory: ad.subcategory?.subcategoryName || null,
+        region: ad.region?.regionName || null,
+        photos: ad.photos.map(photo => ({
+          url: photo.url
+        }))
+      };
+  
+      return res.status(200).json(formattedAd);
     } catch (error) {
       console.error('Ошибка при получении объявления:', error);
       return res.status(500).json({ message: "Ошибка сервера", error: error.message });
     }
   }
 
-  async clearAllAds(req,res) {
-      try {
-        await Ad.truncate({ cascade: true, restartIdentity: true });
-      res.status(200).json({ message: 'Ad cleared and auto-increment reset.' });
-    } catch (error) {
-      res.status(400).json({ error: error.message });
-      console.error('Failed to clear Ad:', error);
+  async clearAllAds(req, res) {
+    const transaction = await sequelize.transaction(); // Начало транзакции
+
+  try {
+    console.log('Начало очистки всех объявлений и фотографий');
+
+    // Находим все объявления с их фотографиями
+    const ads = await Ad.findAll({
+      include: { model: Photo, as: 'photos' },
+      transaction
+    });
+
+    // Проверяем, есть ли объявления
+    if (!ads || ads.length === 0) {
+      await transaction.rollback();
+      return res.status(404).json({ message: 'Объявления не найдены' });
     }
+
+    // Собираем все URL фотографий из всех объявлений
+    const allPhotoUrls = ads.flatMap(ad => ad.photos.map(photo => photo.url));
+
+    // Создаём массив промисов для удаления файлов
+    const deleteFilePromises = allPhotoUrls.map(async (url) => {
+      const filePath = path.resolve(__dirname, '..', 'static', url);
+      try {
+        await fs.unlink(filePath);
+        console.log(`Файл удалён: ${filePath}`);
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          // Файл не найден, можно игнорировать
+          console.log(`Файл не найден, пропуск: ${filePath}`);
+        } else {
+          // Другие ошибки
+          console.error(`Ошибка при удалении файла ${filePath}:`, error);
+          throw error; // Прекращаем выполнение при критической ошибке
+        }
+      }
+    });
+
+    // Ожидаем завершения всех операций удаления файлов
+    await Promise.all(deleteFilePromises);
+
+    // Удаляем все записи фотографий из базы данных и сбрасываем автоинкремент
+    await Photo.truncate({ cascade: true, restartIdentity: true, transaction });
+    console.log('Все записи фотографий удалены из базы данных и индексы сброшены');
+
+    // Удаляем все объявления из базы данных и сбрасываем автоинкремент
+    await Ad.truncate({ cascade: true, restartIdentity: true, transaction });
+    console.log('Все объявления удалены из базы данных и индексы сброшены');
+
+    // Фиксируем транзакцию
+    await transaction.commit();
+
+    // Отправляем успешный ответ клиенту
+    return res.status(200).json({ message: 'Объявления и фотографии успешно удалены и индексы сброшены' });
+  } catch (error) {
+    // Откатываем транзакцию в случае ошибки
+    await transaction.rollback();
+    console.error('Ошибка при удалении объявлений и фотографий:', error);
+    return res.status(500).json({ message: 'Ошибка сервера', error: error.message });
+  }
   }
 
   async delOneAd(req,res)
@@ -380,6 +448,162 @@ async extendAd(req, res) {
     return res.status(200).json({ message: "Объявление продлено", newExpirationDate: ad.expirationDate });
   } catch (error) {
     console.error('Ошибка при продлении объявления:', error);
+    return res.status(500).json({ message: "Ошибка сервера", error: error.message });
+  }
+}
+async AdUpdate(req, res) {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params; // ID объявления для редактирования
+    let { adName, description, price, regionId, categoryId, subcategoryId, duration } = req.body;
+
+    // duration — количество дней, на которые активно объявление (от 7 до 180 дней)
+    if (duration && (duration < 7 || duration > 180)) {
+      return res.status(400).json({ message: "Неверная продолжительность действия объявления" });
+    }
+
+    // Ищем объявление по ID и проверяем, что оно принадлежит текущему пользователю
+    const ad = await Ad.findOne({ where: { id, userId }, include: { model: Photo, as: 'photos' } });
+    if (!ad) {
+      return res.status(404).json({ message: "Объявление не найдено или доступ запрещен" });
+    }
+
+    // Проверяем наличие категории
+    if (categoryId) {
+      const category = await Category.findByPk(categoryId);
+      if (!category) {
+        return res.status(400).json({ message: "Категория не найдена" });
+      }
+    }
+
+    // Проверяем наличие подкатегории
+    if (subcategoryId) {
+      const subcategory = await Subcategory.findOne({ where: { id: subcategoryId, categoryId } });
+      if (!subcategory) {
+        return res.status(400).json({ message: "Подкатегория не найдена или не принадлежит выбранной категории" });
+      }
+    }
+
+    // Обновляем поля объявления
+    ad.adName = adName || ad.adName;
+    ad.description = description || ad.description;
+    ad.price = price || ad.price;
+    ad.regionId = regionId || ad.regionId;
+    ad.categoryId = categoryId || ad.categoryId;
+    ad.subcategoryId = subcategoryId || ad.subcategoryId;
+
+    // Обновляем дату истечения действия, если передано новое значение
+    if (duration) {
+      const now = dayjs();
+      ad.expirationDate = now.add(duration, 'day');
+    }
+
+    // Проверяем наличие новых изображений
+    if (req.files && req.files.images && req.files.images.length > 0) {
+      let images = req.files.images;
+
+      // Если images — это не массив (если одно изображение), превращаем его в массив
+      if (!Array.isArray(images)) {
+        images = [images];
+      }
+
+      // Удаляем старые изображения
+      for (let oldPhoto of ad.photos) {
+        const oldImagePath = path.resolve(__dirname, '..', 'static', oldPhoto.url);
+        if (fs.existsSync(oldImagePath)) {
+          fs.unlinkSync(oldImagePath); // Удаляем файл
+        }
+        await oldPhoto.destroy(); // Удаляем запись из базы данных
+      }
+
+      // Добавляем новые изображения
+      for (let image of images) {
+        let fileName = uuidv4() + path.extname(image.name);
+        const imagePath = path.resolve(__dirname, '..', 'static', fileName);
+
+        // Перемещаем файл в директорию 'static'
+        await image.mv(imagePath);
+
+        // Сохраняем информацию о фото в базе данных и связываем его с объявлением
+        await Photo.create({
+          url: fileName,
+          adId: ad.id
+        });
+      }
+    }
+
+    // Сохраняем изменения объявления
+    await ad.save();
+
+    // Возвращаем обновленное объявление с новыми фотографиями
+    const updatedAd = await Ad.findByPk(ad.id, {
+      include: { model: Photo, as: 'photos' }
+    });
+
+    return res.status(200).json(updatedAd);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Не удалось обновить объявление", error: error.message });
+  }
+}
+async GetUserAd(req, res) { 
+  // Получаем userId из расшифрованного токена
+  const userId = req.user.id;
+  console.log('User ID from token:', userId);
+  
+  try {
+    // Проверка наличия userId
+    if (!userId) {
+      return res.status(400).json({ message: "Некорректный идентификатор пользователя" });
+    }
+
+    let ads = await Ad.findAll({
+      where: { userId }, // Используем userId из токена
+      include: [
+        {
+          model: Category,
+          as: 'category',
+          attributes: ['categoryName'],
+        },
+        {
+          model: Subcategory,
+          as: 'subcategory',
+          attributes: ['subcategoryName'],
+        },
+        {
+          model: Region,
+          as: 'region',
+          attributes: ['regionName'],
+        },
+        {
+          model: Photo,
+          as: 'photos',
+          attributes: ['url'],
+        }
+      ],
+      attributes: ['adName', 'description', 'price']
+    });
+
+    if (!ads || ads.length === 0) {
+      return res.status(404).json({ message: "Объявления не найдены" });
+    }
+
+    // Преобразование структуры данных
+    const transformedAds = ads.map(ad => ({
+      adName: ad.adName,
+      description: ad.description,
+      price: ad.price,
+      category: ad.category ? ad.category.categoryName : null,
+      subcategory: ad.subcategory ? ad.subcategory.subcategoryName : null,
+      region: ad.region ? ad.region.regionName : null,
+      photos: ad.photos.map(photo => ({
+        url: photo.url
+      }))
+    }));
+
+    return res.status(200).json(transformedAds);
+  } catch (error) {
+    console.error('Ошибка при получении объявлений:', error);
     return res.status(500).json({ message: "Ошибка сервера", error: error.message });
   }
 }
