@@ -7,6 +7,15 @@ const nodemailer = require('nodemailer');
 const sequelize = require('../db');
 const util = require('util');
 
+function generateShortConfirmationCode() {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 5; i++) {
+        code += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return code;
+}
+
 const generateJwt = (id, email, role) => {
     return jwt.sign(
         { id, email, role },
@@ -15,60 +24,51 @@ const generateJwt = (id, email, role) => {
     );
 };
 
-function generateConfirmationCode() {
-    return uuidv4();
-}
-
 class UserController {
     async registration(req, res, next) {
         try {
             const { email, password, phoneNumber, firstName, lastName, role } = req.body;
-            const confirmationCode = generateConfirmationCode();
-
+            const confirmationCode = generateShortConfirmationCode(); // 5-символьный код
+    
             if (!email || !password) {
                 return next(ApiError.badRequest('Некорректный email или password'));
             }
-
+    
             const candidate = await User.findOne({ where: { email } });
             if (candidate) {
                 return next(ApiError.badRequest('Пользователь с таким email уже существует'));
             }
-
-            const hashPassword = await bcrypt.hash(password, 10); // Увеличьте количество соли, если необходимо
+    
+            const hashPassword = await bcrypt.hash(password, 10);
             const user = await User.create({ email, phoneNumber, firstName, lastName, role, password: hashPassword, confirmationCode });
             const basket = await Basket.create({ userId: user.id });
-
-            // Настройка Nodemailer
+    
             const transporter = nodemailer.createTransport({
                 host: "smtp.mail.ru",
                 port: 465,
-                secure: true, // true для порта 465 (SSL)
+                secure: true,
                 auth: {
                     user: process.env.EMAIL_USER,
                     pass: process.env.EMAIL_PASS
                 }
             });
-
+    
             const mailOptions = {
-                from: process.env.EMAIL_USER, // Можно добавить имя отправителя, как показано ранее
+                from: process.env.EMAIL_USER,
                 to: user.email,
                 subject: 'Подтверждение регистрации',
                 text: `Ваш код подтверждения: ${confirmationCode}`
             };
-
-            // Отправка письма
+    
             await transporter.sendMail(mailOptions);
             console.log('Письмо отправлено на почту:', user.email);
-
+    
             return res.status(200).json({ message: 'Пользователь зарегистрирован. Проверьте email для подтверждения.' });
         } catch (error) {
             console.error('Ошибка при регистрации пользователя:', error);
-
-            // Проверка, была ли ошибка связана с отправкой письма
             if (error.response && error.response.includes('EAUTH')) {
                 return next(ApiError.internal('Ошибка аутентификации при отправке email'));
             }
-
             return next(ApiError.internal('Ошибка при регистрации пользователя'));
         }
     }
@@ -200,6 +200,77 @@ class UserController {
         } catch (error) {
             console.error(error);
             return next(ApiError.internal('Ошибка при получении данных пользователей'));
+        }
+    }
+    async forgotPassword(req, res, next) {
+        try {
+            const { email } = req.body;
+            const user = await User.findOne({ where: { email } });
+    
+            if (!user) {
+                return next(ApiError.badRequest('Пользователь с таким email не найден'));
+            }
+    
+            const resetCode = generateShortConfirmationCode();
+            user.confirmationCode = resetCode;
+            await user.save();
+    
+            const transporter = nodemailer.createTransport({
+                host: "smtp.mail.ru",
+                port: 465,
+                secure: true,
+                auth: {
+                    user: process.env.EMAIL_USER,
+                    pass: process.env.EMAIL_PASS
+                }
+            });
+    
+            const mailOptions = {
+                from: process.env.EMAIL_USER,
+                to: user.email,
+                subject: 'Восстановление пароля',
+                text: `Ваш код для восстановления пароля: ${resetCode}`
+            };
+    
+            await transporter.sendMail(mailOptions);
+            return res.status(200).json({ message: 'Код восстановления пароля отправлен на почту.' });
+        } catch (error) {
+            console.error('Ошибка при восстановлении пароля:', error);
+            return next(ApiError.internal('Ошибка при восстановлении пароля'));
+        }
+    }
+    async resetPassword(req, res, next) {
+        try {
+            const { email, confirmationCode, newPassword } = req.body;
+    
+            if (!email || !confirmationCode || !newPassword) {
+                return next(ApiError.badRequest('Пожалуйста, предоставьте email, код подтверждения и новый пароль.'));
+            }
+    
+            // Поиск пользователя по email
+            const user = await User.findOne({ where: { email } });
+    
+            if (!user) {
+                return next(ApiError.badRequest('Пользователь с таким email не найден.'));
+            }
+    
+            // Проверка кода подтверждения
+            if (user.confirmationCode !== confirmationCode) {
+                return next(ApiError.badRequest('Неверный код подтверждения.'));
+            }
+    
+            // Хеширование нового пароля
+            const hashPassword = await bcrypt.hash(newPassword, 10);
+    
+            // Обновление пароля и очистка кода подтверждения
+            user.password = hashPassword;
+            user.confirmationCode = null; // Можно сбросить код подтверждения после успешного изменения пароля
+            await user.save();
+    
+            return res.status(200).json({ message: 'Пароль успешно изменён.' });
+        } catch (error) {
+            console.error('Ошибка при смене пароля:', error);
+            return next(ApiError.internal('Ошибка при смене пароля.'));
         }
     }
 }

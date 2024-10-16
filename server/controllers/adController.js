@@ -193,7 +193,7 @@ class AdController
       });
   
       if (!ads || !ads.length) {
-        return res.status(200).json({ message: "Объявления не найдены", ads: [] });
+        return res.status(200).json({ ads: [] });
     }
   
       // Преобразование структуры данных
@@ -249,8 +249,7 @@ class AdController
       });
   
       if (!ad) {
-        console.log('Объявление не найдено');
-        return res.status(404).json({ message: "Объявление не найдено" });
+      return res.status(200).json({ message: "Объявления не найдены" });
       }
   
       // Форматируем данные для вывода
@@ -584,7 +583,7 @@ async GetUserAd(req, res) {
     });
 
     if (!ads || ads.length === 0) {
-      return res.status(404).json({ message: "Объявления не найдены" });
+      return res.status(200).json({ ads: [] });
     }
 
     // Преобразование структуры данных

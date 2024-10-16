@@ -11,6 +11,8 @@ router.post('/login', userController.login);
 router.get('/check', authenticate, userController.check);
 router.delete('/deluser/:userId',authMiddleware, checkRole('ADMIN'),userController.deleteUserData)
 router.get('/getallusers',userController.getUsersCountAndIds)
+router.post('/sendcode',userController.forgotPassword)
+router.post('/changepassword',userController.resetPassword)
 
 
 module.exports = router
