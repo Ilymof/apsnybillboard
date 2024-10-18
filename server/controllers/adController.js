@@ -125,11 +125,17 @@ class AdController
 
       // Преобразуем запрос пользователя, введённый на английской раскладке, в русскую раскладку
       
+  
+      
     try {
-      const { adName, categoryName,subcategoryName ,regionName, minPrice, maxPrice } = req.query;
+      const { adName, categoryId,subcategoryId ,regionId, minPrice, maxPrice } = req.query;
       const switchedQuery = adName ? switchKeyboardLayout(adName) : '';
       const whereConditions = {};
-  
+      
+      let page = parseInt(req.query.page, 10) || 1; // Приведение page к числу
+      const limit = 7; // Лимит объявлений на одну страницу
+      const offset = (page - 1) * limit; // Смещение
+
       // Фильтрация по названию объявления (частичное совпадение)
       if (adName) {
         whereConditions.adName = {
@@ -141,17 +147,17 @@ class AdController
     }
   
       // Фильтрация по категории
-      if (categoryName) {
-        whereConditions['$category.categoryName$'] = categoryName;
+      if (categoryId) {
+        whereConditions['$category.categoryId$'] = categoryId;
       }
   
       // Фильтрация по региону
-      if (regionName) {
-        whereConditions['$region.regionName$'] = regionName;
+      if (regionId) {
+        whereConditions['$region.regionId$'] = regionId;
       }
       // Фильтрация по подкатегориям
-      if (subcategoryName) {
-        whereConditions['$subcategory.subcategoryName$'] = subcategoryName;
+      if (subcategoryId) {
+        whereConditions['$subcategory.subcategoryId$'] = subcategoryId;
       }
   
       // Фильтрация по минимальной и максимальной цене
@@ -189,6 +195,8 @@ class AdController
             attributes: ['url'],
           }
         ],
+        limit,
+        offset,
         attributes: ['adName', 'description', 'price']
       });
   
