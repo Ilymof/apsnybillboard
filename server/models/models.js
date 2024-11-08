@@ -7,7 +7,9 @@ const User = sequelize.define('user', {
     lastName: {type: DataTypes.STRING, allowNull: false},
     email: {type: DataTypes.STRING, unique: true, allowNull: false},
     password: {type: DataTypes.STRING,allowNull: false}, 
-    phoneNumber:{type: DataTypes.STRING, allowNull: false},
+    phoneNumber:{type: DataTypes.INTEGER},
+    telegram:{type: DataTypes.STRING},
+    whatsapp:{type: DataTypes.STRING},
     role: {type: DataTypes.STRING, defaultValue: "USER"},
     confirmationCode: {
         type: DataTypes.STRING

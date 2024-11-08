@@ -69,37 +69,39 @@ async clearSubcategoryList(req, res) {
 }
 async SubcategoryUpdate(req, res) {
   const { id } = req.params;
-  const { subcategoryName } = req.body;
+  const { subcategoryName, path } = req.body; // Добавьте другие атрибуты, которые хотите обновлять
 
   try {
-    // Проверка наличия regionName
-    if (!subcategoryName) {
-      return res.status(400).json({ message: "Поле regionName обязательно для обновления" });
-    }
-
-    // Поиск региона по ID
+    // Поиск подкатегории по ID
     const subcategory = await Subcategory.findOne({ where: { id } });
 
     if (!subcategory) {
       return res.status(404).json({ message: "Подкатегория не найдена или доступ запрещен" });
     }
 
-    // Обновление имени региона
-    subcategory.subcategoryName = subcategoryName;
+    // Обновляем только те поля, которые переданы
+    if (subcategoryName !== undefined) {
+      subcategory.subcategoryName = subcategoryName;
+    }
+
+    if (path !== undefined) {
+      subcategory.path = path;
+    }
 
     // Сохранение изменений
     await subcategory.save();
 
-    // Возврат обновленного региона
+    // Возврат обновлённой подкатегории
     return res.status(200).json({
-      message: "Подкатегория успешно обновлен",
+      message: "Подкатегория успешно обновлена",
       subcategory: {
         id: subcategory.id,
         subcategoryName: subcategory.subcategoryName,
+        path: subcategory.path, // Возвращаем обновлённые данные
       },
     });
   } catch (error) {
-    console.error('Ошибка при обновлении подкатегориии:', error);
+    console.error('Ошибка при обновлении подкатегории:', error);
     return res.status(500).json({ message: "Не удалось обновить подкатегорию", error: error.message });
   }
 }

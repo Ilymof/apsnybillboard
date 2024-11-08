@@ -10,9 +10,10 @@ router.post('/confirm', userController.confirmEmail); // Добавьте это
 router.post('/login', userController.login);
 router.get('/check', authenticate, userController.check);
 router.delete('/deluser/:userId',authMiddleware, checkRole('ADMIN'),userController.deleteUserData)
-router.get('/getallusers',userController.getUsersCountAndIds)
+router.get('/getallusers',authMiddleware,checkRole('ADMIN'),userController.getUsersCountAndIds)
 router.post('/sendcode',userController.forgotPassword)
 router.post('/changepassword',userController.resetPassword)
+router.post('/changecontacts',authMiddleware,userController.changeContacts)
 
 
 module.exports = router

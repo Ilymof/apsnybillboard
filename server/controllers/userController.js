@@ -27,11 +27,15 @@ const generateJwt = (id, email, role) => {
 class UserController {
     async registration(req, res, next) {
         try {
-            const { email, password, phoneNumber, firstName, lastName, role } = req.body;
+            const { email, password, phoneNumber, firstName, lastName,telegram,whatsapp, role } = req.body;
             const confirmationCode = generateShortConfirmationCode(); // 5-символьный код
     
             if (!email || !password) {
                 return next(ApiError.badRequest('Некорректный email или password'));
+            }
+            if(!phoneNumber || !telegram || !whatsapp)
+            {
+                res.status(200).json({ message: 'Добавьте как минимум один из видов связи: номер телефона, telegram, whatsapp ' });
             }
     
             const candidate = await User.findOne({ where: { email } });
@@ -40,7 +44,7 @@ class UserController {
             }
     
             const hashPassword = await bcrypt.hash(password, 10);
-            const user = await User.create({ email, phoneNumber, firstName, lastName, role, password: hashPassword, confirmationCode });
+            const user = await User.create({ email, phoneNumber, firstName, lastName, role, telegram, whatsapp, password: hashPassword, confirmationCode });
             const basket = await Basket.create({ userId: user.id });
     
             const transporter = nodemailer.createTransport({
@@ -272,6 +276,44 @@ class UserController {
             console.error('Ошибка при смене пароля:', error);
             return next(ApiError.internal('Ошибка при смене пароля.'));
         }
+    }
+
+    async changeContacts(req,res,next)
+    {
+        try {
+            const userId = req.user.id;
+            const { telegramChanged, whatsappChanged, phoneNumberChanged } = req.body;
+    
+            // Проверка на наличие пользователя
+            if (!userId) {
+                return res.status(401).json({ message: "Не авторизован" });
+            }
+    
+            // Поиск пользователя по ID
+            const user = await User.findByPk(userId);
+            if (!user) {
+                return res.status(404).json({ message: "Пользователь не найден" });
+            }
+    
+            // Обновление полей контактов, только если данные переданы
+            user.telegram = telegramChanged !== undefined ? telegramChanged : user.telegram;
+            user.whatsapp = whatsappChanged !== undefined ? whatsappChanged : user.whatsapp;
+            user.phoneNumber = phoneNumberChanged !== undefined ? phoneNumberChanged : user.phoneNumber;
+    
+            // Сохранение изменений
+            await user.save();
+    
+            // Возврат обновленных данных пользователя
+            const updatedUser = await User.findByPk(user.id, {
+                attributes: ['telegram', 'whatsapp', 'phoneNumber']
+            });
+    
+            return res.status(200).json(updatedUser);
+        } catch (error) {
+            console.error("Ошибка при изменении контактов:", error);
+            return res.status(500).json({ message: "Не удалось обновить контакты", error: error.message });
+        }
+
     }
 }
 

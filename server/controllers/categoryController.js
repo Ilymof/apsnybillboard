@@ -140,37 +140,39 @@ class CategoryController {
  }
  async сategoryUpdate(req, res) {
   const { id } = req.params;
-  const { categoryName } = req.body;
+  const { categoryName, path } = req.body; // Добавьте другие атрибуты, которые хотите обновлять
 
   try {
-    // Проверка наличия regionName
-    if (!categoryName) {
-      return res.status(400).json({ message: "Поле categoryName обязательно для обновления" });
-    }
-
-    // Поиск региона по ID
+    // Поиск категории по ID
     const category = await Category.findOne({ where: { id } });
 
     if (!category) {
-      return res.status(404).json({ message: "Подкатегория не найдена или доступ запрещен" });
+      return res.status(404).json({ message: "Категория не найдена или доступ запрещен" });
     }
 
-    // Обновление имени региона
-    category.categoryName = categoryName;
+    // Обновляем только те поля, которые переданы
+    if (categoryName !== undefined) {
+      category.categoryName = categoryName;
+    }
+
+    if (path !== undefined) {
+      category.path = path;
+    }
 
     // Сохранение изменений
     await category.save();
 
-    // Возврат обновленного региона
+    // Возврат обновлённой категории
     return res.status(200).json({
-      message: "Категория успешно обновлен",
+      message: "Категория успешно обновлена",
       category: {
         id: category.id,
         categoryName: category.categoryName,
+        path: category.path, // Возвращаем обновлённые данные
       },
     });
   } catch (error) {
-    console.error('Ошибка при обновлении категориии:', error);
+    console.error('Ошибка при обновлении категории:', error);
     return res.status(500).json({ message: "Не удалось обновить категорию", error: error.message });
   }
 }
