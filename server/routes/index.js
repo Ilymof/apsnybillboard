@@ -6,12 +6,14 @@ const categoryRouter = require('../routes/categoryRouter')
 const regionRouter = require('../routes/regionRouter')
 const subcategoryRouter = require('../routes/subcategoryRouter')
 const baskerRouter = require('../routes/basketRouter')
+const chatRouter= require('../routes/chatRouter')
 router.use('/user', userRouter)
 router.use('/ad', adRouter)
 router.use('/category', categoryRouter)
 router.use('/region', regionRouter)
 router.use('/subcategory', subcategoryRouter)
 router.use('/basket', baskerRouter)
+router.use('/chat', chatRouter)
 
 
 module.exports = router

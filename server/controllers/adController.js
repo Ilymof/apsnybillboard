@@ -8,6 +8,7 @@ const cron = require('node-cron');
 const dayjs = require('dayjs');
 const sequelize = require('../db')
 
+
 cron.schedule('0 0 * * *', async () => {
   try {
     const now = new Date();
@@ -230,7 +231,7 @@ class AdController
         ],
         limit, // Пагинация
         offset, // Смещение
-        attributes: ['adName', 'description', 'price', 'createdAt', 'updatedAt', ]
+        attributes: ['id','adName', 'description', 'price', 'createdAt', 'updatedAt', ]
       });
 
       if (!ads || !ads.length) {
@@ -239,6 +240,7 @@ class AdController
 
       // Преобразование структуры данных
       const transformedAds = ads.map(ad => ({
+        adId: ad.id,
         adName: ad.adName,
         description: ad.description,
         price: ad.price,
@@ -333,69 +335,69 @@ class AdController
 
   async clearAllAds(req, res) {
     const transaction = await sequelize.transaction(); // Начало транзакции
-
-  try {
-    console.log('Начало очистки всех объявлений и фотографий');
-
-    // Находим все объявления с их фотографиями
-    const ads = await Ad.findAll({
-      include: { model: Photo, as: 'photos' },
-      transaction
-    });
-
-    // Проверяем, есть ли объявления
-    if (!ads || ads.length === 0) {
-      await transaction.rollback();
-      return res.status(404).json({ message: 'Объявления не найдены' });
-    }
-
-    // Собираем все URL фотографий из всех объявлений
-    const allPhotoUrls = ads.flatMap(ad => ad.photos.map(photo => photo.url));
-
-    // Создаём массив промисов для удаления файлов
-    const deleteFilePromises = allPhotoUrls.map(async (url) => {
-      const filePath = path.resolve(__dirname, '..', 'static', url);
-      try {
-        await fs.unlink(filePath);
-        console.log(`Файл удалён: ${filePath}`);
-      } catch (error) {
-        if (error.code === 'ENOENT') {
-          // Файл не найден, можно игнорировать
-          console.log(`Файл не найден, пропуск: ${filePath}`);
-        } else {
-          // Другие ошибки
-          console.error(`Ошибка при удалении файла ${filePath}:`, error);
-          throw error; // Прекращаем выполнение при критической ошибке
-        }
+  
+    try {
+      console.log('Начало очистки всех объявлений и фотографий');
+  
+      // Находим все объявления с их фотографиями
+      const ads = await Ad.findAll({
+        include: { model: Photo, as: 'photos' },
+        transaction
+      });
+  
+      // Проверяем, есть ли объявления
+      if (!ads || ads.length === 0) {
+        await transaction.rollback();
+        return res.status(404).json({ message: 'Объявления не найдены' });
       }
-    });
-
-    // Ожидаем завершения всех операций удаления файлов
-    await Promise.all(deleteFilePromises);
-
-    // Удаляем все записи фотографий из базы данных и сбрасываем автоинкремент
-    await Photo.truncate({ cascade: true, restartIdentity: true, transaction });
-    console.log('Все записи фотографий удалены из базы данных и индексы сброшены');
-
-    // Удаляем все объявления из базы данных и сбрасываем автоинкремент
-    await Ad.truncate({ cascade: true, restartIdentity: true, transaction });
-    console.log('Все объявления удалены из базы данных и индексы сброшены');
-
-    // Фиксируем транзакцию
-    await transaction.commit();
-
-    // Отправляем успешный ответ клиенту
-    return res.status(200).json({ message: 'Объявления и фотографии успешно удалены и индексы сброшены' });
-  } catch (error) {
-    // Откатываем транзакцию в случае ошибки
-    await transaction.rollback();
-    console.error('Ошибка при удалении объявлений и фотографий:', error);
-    return res.status(500).json({ message: 'Ошибка сервера', error: error.message });
+  
+      // Собираем все URL фотографий из всех объявлений
+      const allPhotoUrls = ads.flatMap(ad => ad.photos.map(photo => photo.url));
+  
+      // Создаём массив промисов для удаления файлов
+      const deleteFilePromises = allPhotoUrls.map(async (url) => {
+        const filePath = path.resolve(__dirname, '..', 'static', url);
+        try {
+          await fs.access(filePath); // Проверяем, существует ли файл
+          await fs.unlink(filePath); // Удаляем файл, если он существует
+          console.log(`Файл удалён: ${filePath}`);
+        } catch (error) {
+          if (error.code === 'ENOENT') {
+            // Файл не найден, можно игнорировать
+            console.log(`Файл не найден, пропуск: ${filePath}`);
+          } else {
+            // Другие ошибки
+            console.error(`Ошибка при удалении файла ${filePath}:`, error);
+            throw error; // Прекращаем выполнение при критической ошибке
+          }
+        }
+      });
+  
+      // Ожидаем завершения всех операций удаления файлов
+      await Promise.all(deleteFilePromises);
+  
+      // Удаляем все записи фотографий из базы данных и сбрасываем автоинкремент
+      await Photo.truncate({ cascade: true, restartIdentity: true, transaction });
+      console.log('Все записи фотографий удалены из базы данных и индексы сброшены');
+  
+      // Удаляем все объявления из базы данных и сбрасываем автоинкремент
+      await Ad.truncate({ cascade: true, restartIdentity: true, transaction });
+      console.log('Все объявления удалены из базы данных и индексы сброшены');
+  
+      // Фиксируем транзакцию
+      await transaction.commit();
+  
+      // Отправляем успешный ответ клиенту
+      return res.status(200).json({ message: 'Объявления и фотографии успешно удалены и индексы сброшены' });
+    } catch (error) {
+      // Откатываем транзакцию в случае ошибки
+      await transaction.rollback();
+      console.error('Ошибка при удалении объявлений и фотографий:', error);
+      return res.status(500).json({ message: 'Ошибка сервера', error: error.message });
+    }
   }
-  }
 
-  async delOneAd(req,res)
-  {
+  async delOneAd(req, res) {
     try {
       const { id } = req.params; // Получаем id объявления из запроса
   
@@ -408,13 +410,19 @@ class AdController
         return res.status(404).json({ message: 'Объявление не найдено' });
       }
   
-      // Удаляем фотографии с файловой системы
+      // Удаляем фотографии с файловой системы, если они существуют
       for (let photo of ad.photos) {
         const filePath = path.resolve(__dirname, '..', 'static', photo.url);
-        
-        // Проверяем, существует ли файл, и удаляем его
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath); // Удаление файла
+  
+        try {
+          await fs.access(filePath); // Проверяем, существует ли файл
+          await fs.unlink(filePath); // Удаляем файл, если он существует
+        } catch (err) {
+          if (err.code !== 'ENOENT') { // ENOENT означает, что файл не найден
+            console.error('Ошибка при удалении файла:', err);
+            return res.status(500).json({ message: 'Ошибка при удалении файла' });
+          }
+          // Если файл не существует, продолжаем выполнение
         }
       }
   
@@ -426,7 +434,8 @@ class AdController
   
       return res.status(200).json({ message: 'Объявление и фотографии удалены' });
     } catch (error) {
-      return res.status(500).json({ message: 'Ошибка сервера' });
+      console.error('Ошибка при удалении объявления:', error);
+      return res.status(500).json({ message: error.message });
     }
   }
 
@@ -449,13 +458,19 @@ class AdController
         return res.status(403).json({ message: 'Нет доступа. Вы можете удалять только свои объявления.' });
       }
   
-      // Удаляем фотографии с файловой системы
+      // Удаляем фотографии с файловой системы, если они существуют
       for (let photo of ad.photos) {
         const filePath = path.resolve(__dirname, '..', 'static', photo.url);
         
-        // Проверяем, существует ли файл, и удаляем его
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath); // Удаление файла
+        try {
+          await fs.access(filePath); // Проверяем, существует ли файл
+          await fs.unlink(filePath); // Удаляем файл, если он существует
+        } catch (err) {
+          if (err.code !== 'ENOENT') { // ENOENT означает, что файл не найден
+            console.error('Ошибка при удалении файла:', err);
+            return res.status(500).json({ message: 'Ошибка при удалении файла' });
+          }
+          // Если файл не существует, продолжаем выполнение
         }
       }
   
@@ -468,9 +483,9 @@ class AdController
       return res.status(200).json({ message: 'Объявление и фотографии удалены' });
     } catch (error) {
       console.error('Ошибка при удалении объявления:', error);
-      return res.status(500).json({ message: 'Ошибка сервера', error: error.message });
+      return res.status(500).json({ message: error.message });
     }
-}
+  }
 async extendAd(req, res) {
   try {
     const adId = req.params.id; // Получаем id из параметров URL

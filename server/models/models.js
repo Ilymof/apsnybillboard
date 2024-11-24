@@ -12,12 +12,8 @@ const User = sequelize.define('user', {
     whatsapp:{type: DataTypes.STRING},
     role: {type: DataTypes.STRING, defaultValue: "USER"},
     confirmationCode: {
-        type: DataTypes.STRING
-      },
-      isConfirmed: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false
-      }
+        type: DataTypes.STRING},
+    isConfirmed: {type: DataTypes.BOOLEAN,defaultValue: false}
 })
 
 const Ad = sequelize.define('ad', 
@@ -66,6 +62,16 @@ const BasketAd = sequelize.define('basket_ad', {
     path:{type: DataTypes.STRING, unique:true}
   });
 
+  const Chat = sequelize.define('chat', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  });
+  
+  const Message = sequelize.define('message', {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    content: { type: DataTypes.TEXT, allowNull: false },
+    isRead: { type: DataTypes.BOOLEAN, defaultValue: false },
+  });
+  
 
   
 User.hasMany(Ad, { foreignKey: 'userId', onDelete: 'CASCADE' });
@@ -92,6 +98,13 @@ Basket.belongsTo(User);
 Basket.belongsToMany(Ad, { through: BasketAd });
 Ad.belongsToMany(Basket, { through: BasketAd });
 
+Chat.belongsTo(User, { as: 'seller', foreignKey: 'sellerId', onDelete: 'CASCADE' });
+Chat.belongsTo(User, { as: 'buyer', foreignKey: 'buyerId', onDelete: 'CASCADE' });
+Chat.belongsTo(Ad, { foreignKey: 'adId', onDelete: 'CASCADE' });
+
+Message.belongsTo(Chat, { foreignKey: 'chatId', onDelete: 'CASCADE' });
+Message.belongsTo(User, { foreignKey: 'senderId', onDelete: 'CASCADE' });
+
 module.exports = 
 {
     User,
@@ -101,5 +114,7 @@ module.exports =
     Region,
     Basket,
     BasketAd,
-    Subcategory
+    Subcategory,
+    Chat,
+    Message
 }

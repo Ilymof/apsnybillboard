@@ -186,20 +186,24 @@ class UserController {
     }
     async getUsersCountAndIds(req, res, next) {
         try {
-            // Получаем всех пользователей
+            // Получаем всех пользователей с атрибутами id и email
             const users = await User.findAll({
-                attributes: ['id'], // Указываем, что хотим получить только поле id
+                attributes: ['id', 'email'], 
             });
-
+    
             // Считаем количество пользователей
             const userCount = await User.count();
-
-            // Получаем массив id пользователей
+    
+            // Создаем массив id пользователей
             const userIds = users.map(user => user.id);
-
+    
+            // Создаем массив email пользователей
+            const userEmails = users.map(user => user.email);
+    
             return res.status(200).json({
                 userCount,
-                userIds
+                userIds,
+                userEmails // Возвращаем массив email
             });
         } catch (error) {
             console.error(error);

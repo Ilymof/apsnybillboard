@@ -46,7 +46,7 @@ class CategoryController {
           {
             model: Subcategory,
             as: 'subcategories',
-            attributes: ['subcategoryName', 'path'], // Получаем название подкатегории и путь
+            attributes: ['id', 'subcategoryName', 'path'], // Получаем id, название подкатегории и путь
           }
         ]
       });
@@ -54,10 +54,11 @@ class CategoryController {
       // Преобразуем категории и подкатегории
       const result = categories.map(category => {
         return {
-          id: category.id,
+          id: category.id, // id категории
           categoryName: category.categoryName,
           path: category.path, // Одинаковый путь для категории
           subcategories: category.subcategories.map(sub => ({
+            id: sub.id, // id подкатегории
             subcategoryName: sub.subcategoryName,
             path: sub.path // Одинаковый путь для подкатегории
           }))
@@ -81,7 +82,7 @@ class CategoryController {
         {
           model: Subcategory,
           as: 'subcategories',
-          attributes: ['subcategoryName', 'path'], // Получаем название подкатегории и её путь
+          attributes: ['id','subcategoryName', 'path'], // Получаем название подкатегории и её путь
         }
       ]
     });
@@ -96,6 +97,7 @@ class CategoryController {
       categoryName: category.categoryName,
       path: category.path,
       subcategories: category.subcategories.map(sub => ({
+        id: sub.id,
         subcategoryName: sub.subcategoryName,
         path: sub.path
       }))
